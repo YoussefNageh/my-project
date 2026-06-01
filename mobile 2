@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, viewport-fit=cover">
+  <title>DentalPro Mobile · Voice + Appointments</title>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script> 
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f0f2f8; color: #1a237e; padding-bottom: 70px; }
+    .gradient-header { background: linear-gradient(90deg, #1a237e, #1565c0); color: white; padding: 1rem 1.2rem; position: sticky; top: 0; z-index: 10; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    .logo-area { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; }
+    .logo-area h1 { font-size: 1.5rem; font-weight: 700; }
+    .user-badge { font-size: 0.75rem; background: rgba(255,255,255,0.2); padding: 4px 10px; border-radius: 40px; }
+    .tabs { display: flex; gap: 0.2rem; margin-top: 12px; background: rgba(255,255,255,0.08); border-radius: 48px; padding: 4px; }
+    .tab-btn { flex: 1; background: transparent; border: none; color: rgba(255,255,255,0.7); font-weight: 600; font-size: 0.85rem; padding: 8px 0; border-radius: 40px; transition: 0.2s; cursor: pointer; }
+    .tab-btn.active { background: white; color: #1a237e; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    .container { padding: 1.25rem 1rem; }
+    .card { background: white; border-radius: 20px; padding: 1.2rem; margin-bottom: 1.2rem; box-shadow: 0 4px 12px rgba(0,0,0,0.04); border: 1px solid #e8eaf6; }
+    .section-title { font-size: 0.9rem; font-weight: 700; color: #1a237e; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; border-left: 3px solid #1565c0; padding-left: 10px; }
+    input, select, textarea { width: 100%; padding: 12px 14px; border: 1px solid #c5cae9; border-radius: 16px; font-size: 0.9rem; background: #fafcff; font-family: inherit; margin-top: 6px; }
+    button { cursor: pointer; border: none; background: #1565c0; color: white; font-weight: 600; border-radius: 40px; padding: 10px 18px; font-size: 0.85rem; transition: 0.2s; }
+    button:active { transform: scale(0.97); }
+    .btn-purple { background: #6a1b9a; }
+    .btn-danger { background: #c62828; }
+    .record-btn { width: 80px; height: 80px; border-radius: 50%; background: #6a1b9a; margin: 10px auto; display: flex; align-items: center; justify-content: center; font-size: 2.8rem; box-shadow: 0 8px 20px rgba(106,27,154,0.4); transition: 0.1s; }
+    .record-btn.recording { background: #c62828; animation: pulse 1.2s infinite; }
+    @keyframes pulse { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.05); opacity: 0.9; } 100% { transform: scale(1); } }
+    .tag-group { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+    .tag { background: #e8eaf6; color: #1a237e; padding: 5px 12px; border-radius: 30px; font-size: 0.75rem; font-weight: 600; }
+    .tag-red { background: #ffebee; color: #b71c1c; }
+    .tag-blue { background: #e3f2fd; color: #0d47a1; }
+    .patient-item { background: #f8f9ff; border-radius: 16px; padding: 12px; margin-bottom: 8px; border: 1px solid #e0e0e0; cursor: pointer; }
+    .patient-item.selected { border: 2px solid #1565c0; background: #e3f2fd; }
+    .today-badge { background: #ffc107; color: #1a237e; font-size: 0.65rem; border-radius: 20px; padding: 2px 8px; font-weight: bold; display: inline-block; }
+    .voice-transcript { background: #f3e5f5; border-radius: 16px; padding: 12px; font-size: 0.9rem; margin: 12px 0; border-left: 4px solid #9c27b0; }
+    .editable-row { display: flex; flex-wrap: wrap; gap: 12px; margin: 8px 0; }
+    .editable-row > div { flex: 1; min-width: 120px; }
+    .small-note { font-size: 0.7rem; color: #6c757d; margin-top: 5px; }
+    .error-msg { background: #ffebee; color: #c62828; border-radius: 14px; padding: 10px; margin-bottom: 12px; font-size: 0.8rem; }
+    .appointment-item { background: #faf9ff; border-radius: 14px; padding: 10px; margin-bottom: 8px; border-left: 4px solid #1565c0; }
+    .conflict-alert { background: #ffebee; color: #c62828; padding: 8px; border-radius: 12px; margin-top: 8px; font-size: 0.75rem; }
+    .reminder-card { background: #e8f5e9; border-radius: 14px; padding: 12px; margin-bottom: 10px; }
+  </style>
+</head>
+<body>
+<div id="appRoot"></div>
+
+<script>
+   firebase.initializeApp({
+  apiKey: "AIzaSyD4Sznz4tNKHJpyXryKccgxmCE6hMYtbMM",
+  authDomain: "dentalpro-sync.firebaseapp.com",
+  projectId: "dentalpro-sync",
+  storageBucket: "dentalpro-sync.firebasestorage.app",
+  messagingSenderId: "941563325600",
+  appId: "1:941563325600:web:1f24f04c2b1a0bc0886dc5"
+});
+
+  var db = firebase.firestore();
+   
+  // ------------------------------------------------------------------
+  // localStorage helpers (same keys as desktop DentalPro)
+  // ------------------------------------------------------------------
+  function loadDentists() {
+    var dentists = localStorage.getItem('dp_dentists');
+    if (dentists) {
+      try { return JSON.parse(dentists); } catch(e) { return []; }
+    }
+    return [];
+  }
+
+  function loadPatientsForDentist(dentistId) {
+    var key = 'dp_patients_' + dentistId;
+    var data = localStorage.getItem(key);
+    if (data) {
+      try { return JSON.parse(data); } catch(e) { return []; }
+    }
+    return [];
+  }
+
+  function savePatientsForDentist(dentistId, patients) {
+    var key = 'dp_patients_' + dentistId;
+    localStorage.setItem(key, JSON.stringify(patients));
+  }
+
+  // Global state
+  var currentDentist = null;
+  var patientsList = [];
+  var selectedPatientId = null;
+  var extractedData = {
+    chiefComplaint: "", conditions: [], allergies: [], medications: [],
+    smoking: "", alcohol: "", bp: "", hr: "", height: "", weight: "",
+    dentalNotes: "", summary: ""
+  };
+  var rawTranscript = "";
+  var isRecording = false;
+  var recognition = null;
+  var currentTab = "voice";
+
+  var rootEl = document.getElementById("appRoot");
+
+  function renderApp() {
+    if (!currentDentist) {
+      renderLoginScreen();
+    } else {
+      patientsList = loadPatientsForDentist(currentDentist.id);
+      if (patientsList.length > 0 && !selectedPatientId) {
+        selectedPatientId = patientsList[0].id;
+      }
+      renderMainTabs();
+    }
+  }
+
+  // ---------- LOGIN (uses dentist credentials from desktop) ----------
+  function renderLoginScreen() {
+    var dentists = loadDentists();
+    var html = '<div style="min-height:100vh; background: linear-gradient(135deg,#0d1030,#1a237e,#1565c0); display:flex; align-items:center; justify-content:center; padding:1rem;">';
+    html += '<div style="background:white; border-radius:28px; padding:2rem 1.5rem; width:100%; max-width:400px; box-shadow:0 20px 40px rgba(0,0,0,0.3);">';
+    html += '<div style="text-align:center; margin-bottom:1.5rem;"><span style="font-size:3rem;">🦷</span><h2 style="color:#1a237e;">DentalPro Mobile</h2><p style="color:#666;">Voice + Appointments · Syncs with Desktop</p></div>';
+    
+    if (dentists.length === 0) {
+      html += '<div class="error-msg">⚠️ No dentist found. Please first create a dentist in the desktop DentalPro app.</div>';
+      html += '<button id="retryBtn" style="width:100%;">⟳ Retry</button>';
+    } else {
+      html += '<div style="margin-bottom:12px;"><label>Select your dentist profile</label><div id="dentistList">';
+      for (var i = 0; i < dentists.length; i++) {
+        var d = dentists[i];
+        html += '<div class="patient-item" data-id="' + d.id + '" data-username="' + d.username + '" data-password="' + d.password + '">';
+        html += '<div style="font-weight:700;">Dr. ' + d.name + '</div>';
+        html += '<div style="font-size:0.75rem; color:#1565c0;">' + d.clinicName + ' · @' + d.username + '</div>';
+        html += '</div>';
+      }
+      html += '</div></div>';
+      html += '<div style="margin-top:12px;"><label>Password</label><input type="password" id="loginPassword" placeholder="Enter password"></div>';
+      html += '<button id="doLoginBtn" style="width:100%; margin-top:16px;">🔐 Sign In</button>';
+      html += '<div id="loginError" class="error-msg" style="display:none; margin-top:12px;"></div>';
+    }
+    html += '</div></div>';
+    rootEl.innerHTML = html;
+
+    if (dentists.length > 0) {
+      var selectedDentistId = null;
+      var dentistDivs = document.querySelectorAll('#dentistList .patient-item');
+      for (var i = 0; i < dentistDivs.length; i++) {
+        dentistDivs[i].onclick = function(e) {
+          for (var j = 0; j < dentistDivs.length; j++) dentistDivs[j].classList.remove('selected');
+          this.classList.add('selected');
+          selectedDentistId = this.getAttribute('data-id');
+        };
+      }
+      document.getElementById('doLoginBtn').onclick = function() {
+        var selected = document.querySelector('#dentistList .patient-item.selected');
+        if (!selected) { showLoginError("Please select a dentist."); return; }
+        var dentistId = selected.getAttribute('data-id');
+        var expectedPw = selected.getAttribute('data-password');
+        var enteredPw = document.getElementById('loginPassword').value;
+        if (enteredPw !== expectedPw) { showLoginError("Incorrect password."); return; }
+        var allDentists = loadDentists();
+        var found = null;
+        for (var i=0; i<allDentists.length; i++) {
+          if (allDentists[i].id == dentistId) { found = allDentists[i]; break; }
+        }
+        if (found) {
+          currentDentist = found;
+          renderApp();
+        } else {
+          showLoginError("Dentist not found.");
+        }
+      };
+    } else {
+      var retryBtn = document.getElementById('retryBtn');
+      if (retryBtn) retryBtn.onclick = function() { renderLoginScreen(); };
+    }
+    function showLoginError(msg) {
+      var errDiv = document.getElementById('loginError');
+      errDiv.innerText = msg;
+      errDiv.style.display = 'block';
+      setTimeout(function() { errDiv.style.display = 'none'; }, 3000);
+    }
+  }
+
+  // ---------- MAIN TABS ----------
+  function renderMainTabs() {
+    var html = '<div class="gradient-header"><div class="logo-area"><h1>🦷 DentalPro Mobile</h1><div class="user-badge">Dr. ' + (currentDentist.name || '') + '</div></div>';
+    html += '<div class="tabs"><button data-tab="voice" class="tab-btn active">🎤 Voice</button><button data-tab="appointments" class="tab-btn">📅 Appointments</button><button data-tab="reminders" class="tab-btn">🔔 Reminders</button></div></div>';
+    html += '<div class="container"><div id="tabVoiceContainer"></div><div id="tabAppointmentsContainer" style="display:none;"></div><div id="tabRemindersContainer" style="display:none;"></div></div>';
+    rootEl.innerHTML = html;
+
+    var btns = document.querySelectorAll(".tab-btn");
+    for (var i=0; i<btns.length; i++) {
+      btns[i].onclick = (function(btn) {
+        return function() { switchTab(btn.getAttribute("data-tab")); };
+      })(btns[i]);
+    }
+    switchTab("voice");
+  }
+
+  function switchTab(tabId) {
+    currentTab = tabId;
+    var voiceDiv = document.getElementById("tabVoiceContainer");
+    var apptDiv = document.getElementById("tabAppointmentsContainer");
+    var remindDiv = document.getElementById("tabRemindersContainer");
+    var btns = document.querySelectorAll(".tab-btn");
+    for (var i=0; i<btns.length; i++) {
+      if (btns[i].getAttribute("data-tab") === tabId) btns[i].classList.add("active");
+      else btns[i].classList.remove("active");
+    }
+    if (tabId === "voice") {
+      voiceDiv.style.display = "block";
+      apptDiv.style.display = "none";
+      remindDiv.style.display = "none";
+      renderVoiceTab();
+    } else if (tabId === "appointments") {
+      voiceDiv.style.display = "none";
+      apptDiv.style.display = "block";
+      remindDiv.style.display = "none";
+      renderAppointmentsTab();
+    } else if (tabId === "reminders") {
+      voiceDiv.style.display = "none";
+      apptDiv.style.display = "none";
+      remindDiv.style.display = "block";
+      renderRemindersTab();
+    }
+  }
+
+  // ========== VOICE TAB (Gemini extraction + save to patient) ==========
+  function renderVoiceTab() {
+    var container = document.getElementById("tabVoiceContainer");
+    if (!container) return;
+    var patientOptions = "";
+    for (var i=0; i<patientsList.length; i++) {
+      var p = patientsList[i];
+      var selectedAttr = (selectedPatientId === p.id) ? "selected" : "";
+      patientOptions += "<option value='" + p.id + "' " + selectedAttr + ">" + (p.name || "No name") + " (" + (p.code || "") + ")</option>";
+    }
+    var html = '<div class="card"><div class="section-title">🦷 Select Patient</div>';
+    html += '<select id="patientSelectVoice">' + patientOptions + '</select>';
+    html += '<button id="refreshPatientsBtn" style="margin-top:8px; background:#e0e0e0; color:#1a237e;">⟳ Refresh list</button>';
+    html += '</div>';
+
+    html += '<div class="card" style="text-align:center;"><div class="section-title">🎙️ Voice Dictation</div>';
+    html += '<div id="recordBtn" class="record-btn">🎤</div><div class="small-note">Tap & speak medical / dental history</div>';
+    html += '<div id="voiceTranscriptArea" class="voice-transcript">💬 Transcript will appear here</div>';
+    html += '<button id="extractBtn" class="btn-purple" style="margin:6px 0;">✨ Extract & Fill with AI (Gemini)</button>';
+    html += '</div>';
+
+    html += '<div class="card"><div class="section-title">📋 Extracted Data (Editable)</div>';
+    html += '<label>Chief Complaint</label><textarea id="editChief" rows="2" placeholder="Chief complaint..."></textarea>';
+    html += '<div class="editable-row"><div><label>BP (mmHg)</label><input id="editBp" placeholder="120/80"></div><div><label>HR (bpm)</label><input id="editHr" placeholder="72"></div></div>';
+    html += '<label>Dental Notes</label><textarea id="editDentalNotes" rows="2" placeholder="Clinical notes..."></textarea>';
+    html += '<div class="tag-group" id="conditionsTags"></div><div class="tag-group" id="allergiesTags"></div><div class="tag-group" id="medicationsTags"></div>';
+    html += '<div><label>Smoking</label><input id="editSmoking" placeholder="Never / Former / Current"></div>';
+    html += '<div><label>Alcohol</label><input id="editAlcohol" placeholder="Never / Social / Moderate"></div>';
+    html += '<div class="editable-row"><div><label>Height (cm)</label><input id="editHeight"></div><div><label>Weight (kg)</label><input id="editWeight"></div></div>';
+    html += '<button id="syncToDesktopBtn" style="background:#2e7d32; margin-top:14px; width:100%;">💾 Save to Desktop (localStorage)</button>';
+    html += '</div>';
+
+    container.innerHTML = html;
+
+    // populate current extracted
+    document.getElementById("editChief").value = extractedData.chiefComplaint || "";
+    document.getElementById("editDentalNotes").value = extractedData.dentalNotes || "";
+    document.getElementById("editBp").value = extractedData.bp || "";
+    document.getElementById("editHr").value = extractedData.hr || "";
+    document.getElementById("editSmoking").value = extractedData.smoking || "";
+    document.getElementById("editAlcohol").value = extractedData.alcohol || "";
+    document.getElementById("editHeight").value = extractedData.height || "";
+    document.getElementById("editWeight").value = extractedData.weight || "";
+    renderExtractedTags();
+
+    var patientSelect = document.getElementById("patientSelectVoice");
+    if (patientSelect) patientSelect.onchange = function() { selectedPatientId = patientSelect.value; };
+    document.getElementById("refreshPatientsBtn").onclick = function() { patientsList = loadPatientsForDentist(currentDentist.id); renderVoiceTab(); };
+    document.getElementById("extractBtn").onclick = function() { if (rawTranscript) callGeminiExtract(rawTranscript); else alert("No transcript. Tap microphone first."); };
+    document.getElementById("syncToDesktopBtn").onclick = function() { syncVoiceToLocalStorage(); };
+    setupVoiceRecording();
+  }
+
+  function renderExtractedTags() {
+    var condDiv = document.getElementById("conditionsTags");
+    var allerDiv = document.getElementById("allergiesTags");
+    var medDiv = document.getElementById("medicationsTags");
+    if (!condDiv) return;
+    condDiv.innerHTML = ""; allerDiv.innerHTML = ""; medDiv.innerHTML = "";
+    for (var i=0; i<extractedData.conditions.length; i++) {
+      var span = document.createElement("span");
+      span.className = "tag tag-red";
+      span.innerText = "🩺 " + extractedData.conditions[i];
+      condDiv.appendChild(span);
+    }
+    for (var j=0; j<extractedData.allergies.length; j++) {
+      var span2 = document.createElement("span");
+      span2.className = "tag tag-red";
+      span2.innerText = "⚠️ " + extractedData.allergies[j];
+      allerDiv.appendChild(span2);
+    }
+    for (var k=0; k<extractedData.medications.length; k++) {
+      var span3 = document.createElement("span");
+      span3.className = "tag tag-blue";
+      span3.innerText = "💊 " + extractedData.medications[k];
+      medDiv.appendChild(span3);
+    }
+  }
+
+  function setupVoiceRecording() {
+    var recordBtn = document.getElementById("recordBtn");
+    if (!recordBtn) return;
+    var SpeechRecognition = window.webkitSpeechRecognition || window.SpeechRecognition;
+    if (!SpeechRecognition) {
+      recordBtn.style.opacity = "0.5";
+      recordBtn.title = "Browser not supported";
+      return;
+    }
+    recordBtn.onclick = function() {
+      if (isRecording) {
+        if (recognition) recognition.stop();
+        isRecording = false;
+        recordBtn.classList.remove("recording");
+        recordBtn.innerText = "🎤";
+      } else {
+        recognition = new SpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = "en-US";
+        recognition.onresult = function(event) {
+          var finalTranscript = "";
+          var interim = "";
+          for (var i = event.resultIndex; i < event.results.length; i++) {
+            var txt = event.results[i][0].transcript;
+            if (event.results[i].isFinal) finalTranscript += txt + " ";
+            else interim += txt;
+          }
+          if (finalTranscript) rawTranscript = finalTranscript;
+          var displayText = (rawTranscript || "") + (interim ? " " + interim : "");
+          var transcriptDiv = document.getElementById("voiceTranscriptArea");
+          if (transcriptDiv) transcriptDiv.innerText = "🎤 " + displayText;
+        };
+        recognition.onerror = function() { stopRecording(); };
+        recognition.onend = function() { stopRecording(); };
+        recognition.start();
+        isRecording = true;
+        recordBtn.classList.add("recording");
+        recordBtn.innerText = "⏹️";
+      }
+    };
+    function stopRecording() {
+      if (recognition) recognition = null;
+      isRecording = false;
+      if (recordBtn) { recordBtn.classList.remove("recording"); recordBtn.innerText = "🎤"; }
+    }
+  }
+
+  function callGeminiExtract(transcriptText) {
+    var apiKey = "AIzaSyAQpSgdXJoI8EgSxsw5skL9Foymc6ZXDqg";
+    var url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + apiKey;
+    var systemPrompt = "You are dental AI scribe. Extract structured data from dictation. Return ONLY valid JSON: { \"chiefComplaint\":\"\", \"conditions\":[], \"allergies\":[], \"medications\":[], \"smoking\":\"\", \"alcohol\":\"\", \"bp\":\"\", \"hr\":\"\", \"height\":\"\", \"weight\":\"\", \"dentalNotes\":\"\", \"summary\":\"\" }. No extra text.";
+    var payload = { contents: [{ parts: [{ text: systemPrompt + " Transcript: " + transcriptText }] }] };
+    var extractBtn = document.getElementById("extractBtn");
+    extractBtn.innerText = "⏳ Analysing...";
+    fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    }).then(function(response) { return response.json(); })
+      .then(function(data) {
+        var textResult = "";
+        if (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts[0].text) {
+          textResult = data.candidates[0].content.parts[0].text;
+        } else { throw new Error("API error"); }
+        var jsonStr = textResult.replace(/```json/g, "").replace(/```/g, "").trim();
+        var parsed = JSON.parse(jsonStr);
+        extractedData = {
+          chiefComplaint: parsed.chiefComplaint || "",
+          conditions: parsed.conditions || [],
+          allergies: parsed.allergies || [],
+          medications: parsed.medications || [],
+          smoking: parsed.smoking || "",
+          alcohol: parsed.alcohol || "",
+          bp: parsed.bp || "",
+          hr: parsed.hr || "",
+          height: parsed.height || "",
+          weight: parsed.weight || "",
+          dentalNotes: parsed.dentalNotes || "",
+          summary: parsed.summary || ""
+        };
+        document.getElementById("editChief").value = extractedData.chiefComplaint;
+        document.getElementById("editDentalNotes").value = extractedData.dentalNotes;
+        document.getElementById("editBp").value = extractedData.bp;
+        document.getElementById("editHr").value = extractedData.hr;
+        document.getElementById("editSmoking").value = extractedData.smoking;
+        document.getElementById("editAlcohol").value = extractedData.alcohol;
+        document.getElementById("editHeight").value = extractedData.height;
+        document.getElementById("editWeight").value = extractedData.weight;
+        renderExtractedTags();
+        extractBtn.innerText = "✨ Extract & Fill with AI (Gemini)";
+        var noteDiv = document.getElementById("voiceTranscriptArea");
+        if (noteDiv) noteDiv.innerHTML = noteDiv.innerHTML + "<br/>✅ AI extracted fields ready.";
+      }).catch(function(err) {
+        extractBtn.innerText = "✨ Extract & Fill with AI (Gemini)";
+        alert("Gemini error: " + err.message);
+      });
+  }
+
+  function syncVoiceToLocalStorage() {
+    if (!selectedPatientId) { alert("Please select a patient."); return; }
+    var patient = null;
+    for (var i=0; i<patientsList.length; i++) {
+      if (patientsList[i].id == selectedPatientId) { patient = patientsList[i]; break; }
+    }
+    if (!patient) { alert("Patient not found"); return; }
+
+    var editChief = document.getElementById("editChief").value;
+    var editDental = document.getElementById("editDentalNotes").value;
+    var editBp = document.getElementById("editBp").value;
+    var editHr = document.getElementById("editHr").value;
+    var editSmoking = document.getElementById("editSmoking").value;
+    var editAlcohol = document.getElementById("editAlcohol").value;
+    var editHeight = document.getElementById("editHeight").value;
+    var editWeight = document.getElementById("editWeight").value;
+
+    var existingMedHist = patient.medHist || { conditions:[], allergies:[], medications:[] };
+    var mergedConditions = mergeUnique(existingMedHist.conditions, extractedData.conditions);
+    var mergedAllergies = mergeUnique(existingMedHist.allergies, extractedData.allergies);
+    var mergedMeds = mergeUnique(existingMedHist.medications, extractedData.medications);
+
+    var prevDentalNotes = patient.dentalNotes || "";
+    var newDentalNotes = prevDentalNotes + (prevDentalNotes ? "\n" : "") + "[Voice] " + (editDental || extractedData.dentalNotes);
+
+    var updatedPatient = JSON.parse(JSON.stringify(patient));
+    updatedPatient.chiefComplaint = editChief || extractedData.chiefComplaint || patient.chiefComplaint;
+    updatedPatient.dentalNotes = newDentalNotes;
+    updatedPatient.medHist = {
+      conditions: mergedConditions,
+      allergies: mergedAllergies,
+      medications: mergedMeds,
+      smoking: editSmoking || extractedData.smoking || "",
+      alcohol: editAlcohol || extractedData.alcohol || "",
+      bp: editBp || extractedData.bp || "",
+      hr: editHr || extractedData.hr || "",
+      height: editHeight || extractedData.height || "",
+      weight: editWeight || extractedData.weight || ""
+    };
+    for (var i=0; i<patientsList.length; i++) {
+      if (patientsList[i].id == selectedPatientId) { patientsList[i] = updatedPatient; break; }
+    }
+    savePatientsForDentist(currentDentist.id, patientsList);
+    alert("✓ Saved to Desktop! Patient record updated.");
+  }
+
+  function mergeUnique(arrA, arrB) {
+    var combined = arrA.slice();
+    for (var i=0; i<arrB.length; i++) {
+      if (combined.indexOf(arrB[i]) === -1) combined.push(arrB[i]);
+    }
+    return combined;
+  }
+
+  // ========== APPOINTMENTS TAB (Add + Conflict Detection) ==========
+  function renderAppointmentsTab() {
+    var container = document.getElementById("tabAppointmentsContainer");
+    if (!container) return;
+    var patientOptions = "<option value=''>-- Select Patient --</option>";
+    for (var i=0; i<patientsList.length; i++) {
+      var p = patientsList[i];
+      patientOptions += "<option value='" + p.id + "'>" + (p.name || "No name") + " (" + (p.code || "") + ")</option>";
+    }
+    var html = '<div class="card"><div class="section-title">➕ New Appointment</div>';
+    html += '<label>Patient</label><select id="apptPatientId">' + patientOptions + '</select>';
+    html += '<label>Date</label><input type="date" id="apptDate" value="' + getTodayStr() + '">';
+    html += '<label>Time</label><input type="time" id="apptTime" value="09:00">';
+    html += '<label>Purpose</label><input id="apptPurpose" placeholder="e.g., Follow-up, Cleaning">';
+    html += '<label>Notes</label><textarea id="apptNotes" rows="2"></textarea>';
+    html += '<div id="conflictWarning" class="conflict-alert" style="display:none;"></div>';
+    html += '<button id="addApptBtn" style="margin-top:12px;">📅 Schedule Appointment</button>';
+    html += '</div>';
+
+    html += '<div class="card"><div class="section-title">📋 Upcoming Appointments</div><div id="upcomingApptsList"></div></div>';
+    container.innerHTML = html;
+    refreshUpcomingAppointments();
+
+    document.getElementById("addApptBtn").onclick = function() { addAppointment(); };
+    document.getElementById("apptDate").onchange = function() { checkConflictLive(); };
+    document.getElementById("apptTime").onchange = function() { checkConflictLive(); };
+    document.getElementById("apptPatientId").onchange = function() { checkConflictLive(); };
+  }
+
+  function getTodayStr() {
+    var d = new Date();
+    var month = '' + (d.getMonth() + 1);
+    var day = '' + d.getDate();
+    var year = d.getFullYear();
+    if (month.length < 2) month = '0' + month;
+    if (day.length < 2) day = '0' + day;
+    return [year, month, day].join('-');
+  }
+
+  function checkConflictLive() {
+    var patientId = document.getElementById("apptPatientId").value;
+    var date = document.getElementById("apptDate").value;
+    var time = document.getElementById("apptTime").value;
+    var warnDiv = document.getElementById("conflictWarning");
+    if (!patientId || !date || !time) { warnDiv.style.display = "none"; return; }
+    var conflict = isTimeConflict(patientId, date, time);
+    if (conflict) {
+      warnDiv.style.display = "block";
+      warnDiv.innerText = "⚠️ Conflict: Another patient already has an appointment at " + date + " " + time + ". Please choose a different time.";
+    } else {
+      warnDiv.style.display = "none";
+    }
+  }
+
+  function isTimeConflict(patientId, date, time) {
+    // Check all patients (including this one) for any appointment at same date+time
+    for (var i=0; i<patientsList.length; i++) {
+      var p = patientsList[i];
+      var appointments = p.appointments || [];
+      for (var j=0; j<appointments.length; j++) {
+        var a = appointments[j];
+        if (a.date === date && a.time === time && a.status !== "Cancelled") {
+          // If it's the same patient and we are editing, maybe allow? But for new appointment, conflict.
+          // For simplicity, any overlap is conflict.
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  function addAppointment() {
+    var patientId = document.getElementById("apptPatientId").value;
+    if (!patientId) { alert("Select a patient."); return; }
+    var date = document.getElementById("apptDate").value;
+    var time = document.getElementById("apptTime").value;
+    var purpose = document.getElementById("apptPurpose").value;
+    var notes = document.getElementById("apptNotes").value;
+    if (!date || !time || !purpose) { alert("Date, time and purpose required."); return; }
+    if (isTimeConflict(patientId, date, time)) {
+      alert("Time conflict! Please choose another slot.");
+      return;
+    }
+    var patientIndex = -1;
+    for (var i=0; i<patientsList.length; i++) {
+      if (patientsList[i].id == patientId) { patientIndex = i; break; }
+    }
+    if (patientIndex === -1) { alert("Patient not found."); return; }
+    var newAppt = {
+      id: Date.now(),
+      date: date,
+      time: time,
+      purpose: purpose,
+      status: "Scheduled",
+      notes: notes
+    };
+    var patient = patientsList[patientIndex];
+    if (!patient.appointments) patient.appointments = [];
+    patient.appointments.push(newAppt);
+    savePatientsForDentist(currentDentist.id, patientsList);
+    alert("Appointment scheduled! It will appear in desktop app after refresh.");
+    // Refresh the appointments list
+    refreshUpcomingAppointments();
+    // Clear form
+    document.getElementById("apptPurpose").value = "";
+    document.getElementById("apptNotes").value = "";
+  }
+
+  function refreshUpcomingAppointments() {
+    var listDiv = document.getElementById("upcomingApptsList");
+    if (!listDiv) return;
+    var allAppts = [];
+    for (var i=0; i<patientsList.length; i++) {
+      var p = patientsList[i];
+      var appts = p.appointments || [];
+      for (var j=0; j<appts.length; j++) {
+        var a = appts[j];
+        if (a.date >= getTodayStr() && a.status === "Scheduled") {
+          allAppts.push({ patientName: p.name, patientCode: p.code, ...a });
+        }
+      }
+    }
+    allAppts.sort(function(x,y) { return (x.date + x.time) > (y.date + y.time) ? 1 : -1; });
+    if (allAppts.length === 0) {
+      listDiv.innerHTML = "<div class='small-note'>No upcoming appointments.</div>";
+      return;
+    }
+    var html = "";
+    for (var i=0; i<allAppts.length; i++) {
+      var a = allAppts[i];
+      html += '<div class="appointment-item">';
+      html += '<div><strong>' + a.patientName + '</strong> (' + a.patientCode + ')</div>';
+      html += '<div>📅 ' + a.date + '  🕐 ' + a.time + '</div>';
+      html += '<div>🦷 ' + a.purpose + '</div>';
+      if (a.notes) html += '<div class="small-note">📝 ' + a.notes + '</div>';
+      html += '</div>';
+    }
+    listDiv.innerHTML = html;
+  }
+
+  // ========== REMINDERS TAB (Today + Upcoming + Notification) ==========
+  function renderRemindersTab() {
+    var container = document.getElementById("tabRemindersContainer");
+    if (!container) return;
+    var todayStr = getTodayStr();
+    var todayAppts = [];
+    var upcomingAppts = [];
+    for (var i=0; i<patientsList.length; i++) {
+      var p = patientsList[i];
+      var appts = p.appointments || [];
+      for (var j=0; j<appts.length; j++) {
+        var a = appts[j];
+        if (a.status !== "Scheduled") continue;
+        if (a.date === todayStr) {
+          todayAppts.push({ patientName: p.name, patientCode: p.code, ...a });
+        } else if (a.date > todayStr) {
+          upcomingAppts.push({ patientName: p.name, patientCode: p.code, ...a });
+        }
+      }
+    }
+    todayAppts.sort(function(x,y) { return (x.time > y.time) ? 1 : -1; });
+    upcomingAppts.sort(function(x,y) { return (x.date + x.time) > (y.date + y.time) ? 1 : -1; });
+
+    var html = '<div class="card"><div class="section-title">📅 Today\'s Appointments</div>';
+    if (todayAppts.length === 0) html += '<div class="small-note">No appointments today.</div>';
+    else {
+      for (var i=0; i<todayAppts.length; i++) {
+        var a = todayAppts[i];
+        html += '<div class="reminder-card"><div><strong>' + a.patientName + '</strong> (' + a.patientCode + ')</div>';
+        html += '<div>🕐 ' + a.time + ' · ' + a.purpose + '</div>';
+        if (a.notes) html += '<div class="small-note">' + a.notes + '</div>';
+        html += '</div>';
+      }
+    }
+    html += '</div>';
+
+    html += '<div class="card"><div class="section-title">🔔 Upcoming (Next 7 days)</div>';
+    var next7 = upcomingAppts.filter(function(a) {
+      var diff = (new Date(a.date) - new Date(todayStr)) / (1000*3600*24);
+      return diff <= 7;
+    });
+    if (next7.length === 0) html += '<div class="small-note">No appointments in the next week.</div>';
+    else {
+      for (var i=0; i<next7.length; i++) {
+        var a = next7[i];
+        html += '<div class="reminder-card"><div><strong>' + a.patientName + '</strong> (' + a.patientCode + ')</div>';
+        html += '<div>📅 ' + a.date + ' at ' + a.time + ' · ' + a.purpose + '</div>';
+        html += '</div>';
+      }
+    }
+    html += '<button id="testNotifBtn" style="margin-top:12px; background:#6a1b9a;">🔔 Test Reminder (Browser Notification)</button>';
+    html += '</div>';
+    container.innerHTML = html;
+
+    document.getElementById("testNotifBtn").onclick = function() {
+      if (Notification.permission === "granted") {
+        new Notification("DentalPro Reminder", { body: "You have " + todayAppts.length + " appointment(s) today. Check the app.", icon: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='80'%3E🦷%3C/text%3E%3C/svg%3E" });
+      } else if (Notification.permission !== "denied") {
+        Notification.requestPermission().then(function(perm) {
+          if (perm === "granted") alert("Notifications enabled. Click again to test.");
+        });
+      } else {
+        alert("Notifications blocked. Please allow in browser settings.");
+      }
+    };
+    if (Notification.permission !== "granted" && Notification.permission !== "denied") {
+      // request softly on first visit
+      Notification.requestPermission();
+    }
+  }
+
+  // start app
+  db.collection('dentists').get().then(function(snapshot) {
+  if (snapshot.size > 0) {
+    var dentists = [];
+    snapshot.forEach(function(doc) { dentists.push(doc.data()); });
+    localStorage.setItem('dp_dentists', JSON.stringify(dentists));
+  }
+  renderApp();
+}).catch(function(e) {
+  console.log('Firebase error:', e);
+  renderApp();
+});
+</script>
+</body>
+</html>
